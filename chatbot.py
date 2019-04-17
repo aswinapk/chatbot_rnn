@@ -31,13 +31,14 @@ def main():
     parser.add_argument('--topn', type=int, default=-1,
                         help='at each step, choose from only this many most likely characters;'
                         'set to <0 to disable top-n filtering.')
-    parser.add_argument('--relevance', type=float, default=-1.,
+    parser.add_argument('--relevance', type=float, default=0,
                        help='amount of "relevance masking/MMI (disabled by default):"'
                        'higher is more pressure, 0.4 is probably as high as it can go without'
                        'noticeably degrading coherence;'
-                       'set to <0 to disable relevance masking')
+                       'set to <0 to disable relevance masking')#-1.
     args = parser.parse_args()
     return sample_main(args)
+
 
 def get_paths(input_path):
     if os.path.isfile(input_path):
@@ -55,6 +56,7 @@ def get_paths(input_path):
     else:
         raise ValueError('save_dir is not a valid path.')
     return model_path, os.path.join(save_dir, 'config.pkl'), os.path.join(save_dir, 'chars_vocab.pkl')
+
 
 def sample_main(args):
     model_path, config_path, vocab_path = get_paths(args.save_dir)
@@ -74,7 +76,7 @@ def sample_main(args):
     config.gpu_options.allow_growth = True
     # Make tensorflow less verbose; filter out info (1+) and warnings (2+) but not errors (3).
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-    #with tf.Session(config=config) as sess:
+    # with tf.Session(config=config) as sess:
     sess = tf.Session(config=config)
     tf.global_variables_initializer().run(session=sess)
     saver = tf.train.Saver(net.save_variables_list())
@@ -83,9 +85,11 @@ def sample_main(args):
     saver.restore(sess, model_path)
     return net, sess, chars, vocab, args.n, args.beam_width, args.relevance, args.temperature, args.topn
 
+
 def initial_state(net, sess):
     # Return freshly initialized model states.
     return sess.run(net.zero_state)
+
 
 def forward_text(net, sess, states, relevance, vocab, prime_text=None):
     if prime_text is not None:
@@ -102,12 +106,15 @@ def forward_text(net, sess, states, relevance, vocab, prime_text=None):
                 _, states = net.forward_model(sess, states, vocab[char])
     return states
 
+
 def sanitize_text(vocab, text): # Strip out characters that are not part of the net's vocab.
     return ''.join(i for i in text if i in vocab)
+
 
 def initial_state_with_relevance_masking(net, sess, relevance):
     if relevance <= 0.: return initial_state(net, sess)
     else: return [initial_state(net, sess), initial_state(net, sess)]
+
 
 def possibly_escaped_char(raw_chars):
     if raw_chars[-1] == ';':
@@ -124,7 +131,8 @@ def possibly_escaped_char(raw_chars):
 
 def chatbot(net, sess, chars, vocab, max_length, beam_width, relevance, temperature, topn, guiinput):
     states = initial_state_with_relevance_masking(net, sess, relevance)
-    user_input = guiinput#input('\n> ')
+    # user_input = input('\n> ')
+    user_input = guiinput
     user_command_entered, reset, states, relevance, temperature, topn, beam_width = process_user_command(
         user_input, states, relevance, temperature, topn, beam_width)
     if reset: states = initial_state_with_relevance_masking(net, sess, relevance)
@@ -146,7 +154,7 @@ def chatbot(net, sess, chars, vocab, max_length, beam_width, relevance, temperat
             states = forward_text(net, sess, states, relevance, vocab, chars[char_token])
             if i >= max_length: break
         states = forward_text(net, sess, states, relevance, vocab, sanitize_text(vocab, "\n> "))
-        return out_chars
+        return ''.join(out_chars)
 
 
 def process_user_command(user_input, states, relevance, temperature, topn, beam_width):
@@ -182,6 +190,7 @@ def process_user_command(user_input, states, relevance, temperature, topn, beam_
         print("[Value error with provided argument.]")
     return user_command_entered, reset, states, relevance, temperature, topn, beam_width
 
+
 def consensus_length(beam_outputs, early_term_token):
     for l in range(len(beam_outputs[0])):
         if l > 0 and beam_outputs[0][l-1] == early_term_token:
@@ -189,6 +198,7 @@ def consensus_length(beam_outputs, early_term_token):
         for b in beam_outputs[1:]:
             if beam_outputs[0][l] != b[l]: return l, False
     return l, False
+
 
 def scale_prediction(prediction, temperature):
     if (temperature == 1.0): return prediction # Temperature 1.0 makes no change
@@ -198,6 +208,7 @@ def scale_prediction(prediction, temperature):
     scaled_prediction = np.exp(scaled_prediction)
     np.seterr(divide='warn')
     return scaled_prediction
+
 
 def forward_with_mask(sess, net, states, input_sample, forward_args):
     # forward_args is a dictionary containing arguments for generating probabilities.
@@ -232,8 +243,8 @@ def forward_with_mask(sess, net, states, input_sample, forward_args):
         prob = prob / sum(prob)
     return prob, states
 
-def beam_search_generator(sess, net, initial_state, initial_sample,
-    early_term_token, beam_width, forward_model_fn, forward_args):
+
+def beam_search_generator(sess, net, initial_state, initial_sample,early_term_token, beam_width, forward_model_fn, forward_args):
     '''Run beam search! Yield consensus tokens sequentially, as a generator;
     return when reaching early_term_token (newline).
 
