@@ -9,10 +9,11 @@ from tensorflow.python.util.nest import flatten
 
 import numpy as np
 
+
 class PartitionedMultiRNNCell(rnn_cell.RNNCell):
     """RNN cell composed sequentially of multiple simple cells."""
 
-    # Diagramn of a PartitionedMultiRNNCell net with three layers and three partitions per layer.
+    # Diagram of a PartitionedMultiRNNCell net with three layers and three partitions per layer.
     # Each brick shape is a partition, which comprises one RNNCell of size partition_size.
     # The two tilde (~) characters indicate wrapping (i.e. the two halves are a single partition).
     # Like laying bricks, each layer is offset by half a partition width so that influence spreads
@@ -139,13 +140,13 @@ class Model():
         # cell = MyMultiRNNCell([cell_fn(args.block_size) for _ in range(args.num_layers)])
         cell = PartitionedMultiRNNCell(cell_fn, partitions=args.num_blocks,
             partition_size=args.block_size, layers=args.num_layers)
-
+        # print("num_blocks: ",args.num_blocks,"bock_size: ",args.block_size,"num_layers: ",args.num_layers)
         # Create a TF placeholder node of 32-bit ints (NOT floats!),
         # of shape batch_size x seq_length. This shape matches the batches
         # (listed in x_batches and y_batches) constructed in create_batches in utils.py.
         # input_data will receive input batches.
         self.input_data = tf.placeholder(tf.int32, [args.batch_size, args.seq_length])
-
+        # print("input_data_shape: ",self.input_data.shape)
         self.zero_state = cell.zero_state(args.batch_size, tf.float32)
 
         self.initial_state = _rnn_state_placeholders(self.zero_state)
@@ -159,8 +160,10 @@ class Model():
             # softmax_w is a weights matrix from the top layer of the model (of size layer_size)
             # to the vocabulary output (of size vocab_size).
             softmax_w = tf.get_variable("softmax_w", [layer_size, args.vocab_size])
+            # print("softmax_w.shape: ",softmax_w.shape)
             # softmax_b is a bias vector of the ouput characters (of size vocab_size).
             softmax_b = tf.get_variable("softmax_b", [args.vocab_size])
+            # print("softmax_b.shape: ", softmax_b.shape)
             # Create new variable named 'embedding' to connect the character input to the base layer
             # of the RNN. Its role is the conceptual inverse of softmax_w.
             # It contains the trainable weights from the one-hot input vector to the lowest layer of RNN.
@@ -168,11 +171,13 @@ class Model():
             # Create an embedding tensor with tf.nn.embedding_lookup(embedding, self.input_data).
             # This tensor has dimensions batch_size x seq_length x layer_size.
             inputs = tf.nn.embedding_lookup(embedding, self.input_data)
+            # print("embedding out: ",inputs.shape)
 
         # TODO: Check arguments parallel_iterations (default uses more memory and less time) and
         # swap_memory (default uses more memory but "minimal (or no) performance penalty")
         outputs, self.final_state = tf.nn.dynamic_rnn(cell, inputs,
                 initial_state=self.initial_state, scope='rnnlm')
+        # print("output_shape_rnn: ",outputs.shape)
         # outputs has shape [batch_size, max_time, cell.output_size] because time_major == false.
         # Do we need to transpose the first two dimensions? (Answer: no, this ruins everything.)
         # outputs = tf.transpose(outputs, perm=[1, 0, 2])
@@ -182,11 +187,12 @@ class Model():
         # Recall that outputs is a 2D tensor of shape [(batch_size * seq_length) x layer_size],
         # and softmax_w is a 2D tensor of shape [layer_size x vocab_size].
         # The matrix product is therefore a new 2D tensor of [(batch_size * seq_length) x vocab_size].
-        # In other words, that multiplication converts a loooong list of layer_size vectors
+        # In other words, that multiplication converts a long list of layer_size vectors
         # to a loooong list of vocab_size vectors.
         # Then add softmax_b (a single vocab-sized vector) to every row of that list.
         # That gives you the logits!
         self.logits = tf.matmul(output, softmax_w) + softmax_b
+        # print("logit_out: ",self.logits.shape)
         if infer:
             # Convert logits to probabilities. Probs isn't used during training! That node is never calculated.
             # Like logits, probs is a tensor of shape [(batch_size * seq_length) x vocab_size].
@@ -250,6 +256,7 @@ class Model():
     def forward_model(self, sess, state, input_sample):
         '''Run a forward pass. Return the updated hidden state and the output probabilities.'''
         shaped_input = np.array([[input_sample]], np.float32)
+        # print(shaped_input.shape)
         inputs = {self.input_data: shaped_input}
         self.add_state_to_feed_dict(inputs, state)
         [probs, state] = sess.run([self.probs, self.final_state], feed_dict=inputs)
