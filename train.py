@@ -53,6 +53,7 @@ def train(args):
     # from utils.py (and creates them if they don't already exist).
     # These files go in the data directory.
     data_loader = TextLoader(args.data_dir, args.batch_size, args.seq_length)
+    print(args.data_dir)
     args.vocab_size = data_loader.vocab_size
 
     load_model = False
@@ -86,6 +87,11 @@ def train(args):
     print("Building the model")
     model = Model(args)
     print("Total trainable parameters: {:,d}".format(model.trainable_parameter_count()))
+    model_vars = tf.trainable_variables()
+
+    import tensorflow.contrib.slim as slim
+    slim.model_analyzer.analyze_vars(model_vars,print_info=True)
+    # print(model)
     
     # Make tensorflow less verbose; filter out info (1+) and warnings (2+) but not errors (3).
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -125,6 +131,8 @@ def train(args):
                 state = sess.run(model.zero_state)
                 batch_range = (initial_batch_step, data_loader.total_batch_count)
                 initial_batch_step = 0
+                input_size=0
+                output_size=0
                 for b in range(*batch_range):
                     global_step += 1
                     if global_step % args.decay_steps == 0:
@@ -137,7 +145,10 @@ def train(args):
                     start = time.time()
                     # Pull the next batch inputs (x) and targets (y) from the data loader.
                     x, y = data_loader.next_batch()
-
+                    input_size+=len(x)
+                    output_size+=len(y)
+                    print("batch input--: ",x[0])
+                    print("batch targets--: ", y.shape)
                     # feed is a dictionary of variable references and respective values for initialization.
                     # Initialize the model's input data and target data from the batch,
                     # and initialize the model state to the final state from the previous batch, so that
@@ -166,6 +177,8 @@ def train(args):
                             or (e == epoch_range[1] - 1 and b == batch_range[1] - 1):
                         save_model(sess, saver, model, args.save_dir, global_step,
                                 data_loader.total_batch_count, global_seconds_elapsed)
+                    # print(input_size,output_size)
+
         except KeyboardInterrupt:
             # Introduce a line break after ^C is displayed so save message
             # is on its own line.
