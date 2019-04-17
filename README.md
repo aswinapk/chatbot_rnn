@@ -1,6 +1,6 @@
 
 - **Download [pre-trained model](https://drive.google.com/uc?id=1OZgzVYTLXSK4-CuFV6z1rtMKtHv-AFLc&export=download)** . Replace the models folder with this folder.
-**Download [pre-trained model](https://drive.google.com/uc?id=1M2Rxr2IyHuV_3yHgvz5FqWKYUF1BVX58&export=download)** . Replace the data folder with this folder.
+**Download [preprocessed dataset](https://drive.google.com/uc?id=1M2Rxr2IyHuV_3yHgvz5FqWKYUF1BVX58&export=download)** . Replace the data folder with this folder.
 - **Run the chatbot**. Open a terminal session and run `python3 gui.py`.
 
 
